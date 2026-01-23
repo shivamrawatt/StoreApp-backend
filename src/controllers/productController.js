@@ -65,3 +65,31 @@ exports.deleteProduct = async (req, res) => {
     res.status(400).json({ message: error.message });
   }
 };
+
+// UPDATE STOCK (increment or decrement)
+exports.updateStock = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { change } = req.body; // can be + or -
+
+    const product = await Product.findById(id);
+
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    const newStock = product.stock + Number(change);
+
+    if (newStock < 0) {
+      return res.status(400).json({ message: 'Insufficient stock' });
+    }
+
+    product.stock = newStock;
+    await product.save();
+
+    res.json(product);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+

@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 
 const productRoutes = require('./routes/productRoutes');
+const transactionRoutes = require('./routes/transactionRoutes');
+const authRoutes = require('./routes/authRoutes');
 
 const app = express();
 
@@ -15,5 +17,7 @@ app.get('/api/health', (req, res) => {
 
 // ✅ REGISTER PRODUCT ROUTES
 app.use('/api/products', productRoutes);
+app.use('/api/transactions', transactionRoutes);
+app.use('/api/auth', authRoutes);
 
 module.exports = app;
