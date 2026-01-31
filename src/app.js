@@ -4,6 +4,7 @@ const cors = require('cors');
 const productRoutes = require('./routes/productRoutes');
 const transactionRoutes = require('./routes/transactionRoutes');
 const authRoutes = require('./routes/authRoutes');
+const stripeRoutes = require('./routes/stripeRoutes');   // 👈 ADD
 
 const app = express();
 
@@ -14,10 +15,12 @@ app.use(express.json());
 app.get('/api/health', (req, res) => {
   res.json({ status: 'Backend is running' });
 });
-
-// ✅ REGISTER PRODUCT ROUTES
+// ROUTES
 app.use('/api/products', productRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/stripe', stripeRoutes);   // 👈 ADD
+const mongoose = require('mongoose');
+
 
 module.exports = app;

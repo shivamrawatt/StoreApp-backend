@@ -1,17 +1,40 @@
 const Transaction = require('../models/transaction');
 
-// CREATE transaction (checkout)
+
+
 exports.createTransaction = async (req, res) => {
   try {
-    const { items, total } = req.body;
+    // 🔥 LOG FOR DEBUG (KEEP FOR NOW)
+    console.log('CREATE TX BODY:', req.body);
+
+    const {
+      items,
+      total,
+      paymentMethod,
+      paymentStatus,
+      customerName,
+      customerMobile,
+    } = req.body;
+
+    // 🔥 EXPLICIT VALIDATION (CLEAR ERROR)
+    if (!customerName || !customerMobile) {
+      return res.status(400).json({
+        message: 'Customer name and mobile are required',
+      });
+    }
 
     const tx = await Transaction.create({
       items,
       total,
+      paymentMethod,
+      paymentStatus,
+      customerName,
+      customerMobile,
     });
 
     res.status(201).json(tx);
   } catch (error) {
+    console.error('TX ERROR:', error.message);
     res.status(400).json({ message: error.message });
   }
 };
@@ -31,6 +54,9 @@ exports.getSummary = async (req, res) => {
   try {
     const result = await Transaction.aggregate([
       {
+        $match: { paymentStatus: 'PAID' } // ✅ ONLY PAID
+      },
+      {
         $group: {
           _id: null,
           totalSales: { $sum: '$total' },
@@ -40,7 +66,6 @@ exports.getSummary = async (req, res) => {
     ]);
 
     const summary = result[0] || { totalSales: 0, count: 0 };
-
     res.json(summary);
   } catch (error) {
     res.status(500).json({ message: error.message });
