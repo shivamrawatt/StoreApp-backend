@@ -3,12 +3,16 @@ const Product = require('../models/product.js');
 // GET all products
 exports.getProducts = async (req, res) => {
   try {
-    const products = await Product.find().sort({ name: 1 });
+    const products = await Product
+      .find({ shopId: req.shopId })   // ⭐ FILTER
+      .sort({ name: 1 });
+
     res.json(products);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
+
 
 // CREATE product (with Cloudinary image) — MERGE IF NAME EXISTS
 exports.createProduct = async (req, res) => {
@@ -23,6 +27,7 @@ exports.createProduct = async (req, res) => {
 
     // 🔥 FIND EXISTING PRODUCT USING nameLower
     const existingProduct = await Product.findOne({
+      shopId: req.shopId, 
       nameLower: normalizedName,
     });
 
@@ -56,6 +61,7 @@ exports.createProduct = async (req, res) => {
 
     // 🔥 CREATE NEW PRODUCT
     const product = await Product.create({
+       shopId: req.shopId,     
       name: name.trim(),
       stock: Number(stock),
       price: Number(price),
@@ -100,11 +106,11 @@ exports.updateProduct = async (req, res) => {
       updates.nameLower = updates.name.trim().toLowerCase();
     }
 
-    const product = await Product.findByIdAndUpdate(
-      id,
-      updates,
-      { new: true }
-    );
+    const product = await Product.findOneAndUpdate(
+  { _id: id, shopId: req.shopId },   // ⭐
+  updates,
+  { new: true }
+);
 
     if (!product) {
       return res.status(404).json({ message: 'Product not found' });
@@ -122,7 +128,11 @@ exports.deleteProduct = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const product = await Product.findByIdAndDelete(id);
+    const product = await Product.findOneAndDelete({
+  _id: id,
+  shopId: req.shopId,               // ⭐
+});
+
 
     if (!product) {
       return res.status(404).json({ message: 'Product not found' });
@@ -141,7 +151,11 @@ exports.updateStock = async (req, res) => {
     const { id } = req.params;
     const { change } = req.body;
 
-    const product = await Product.findById(id);
+   const product = await Product.findOne({
+  _id: id,
+  shopId: req.shopId,               // ⭐
+});
+
 
     if (!product) {
       return res.status(404).json({ message: 'Product not found' });

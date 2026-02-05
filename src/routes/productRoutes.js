@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 const upload = require('../middleware/upload'); // ✅ Cloudinary upload middleware
-
+const auth = require('../middleware/auth');
 const {
   getProducts,
   createProduct,
@@ -11,6 +11,7 @@ const {
   updateStock,
 } = require('../controllers/productController');
 
+router.use(auth); 
 // GET all products
 router.get('/', getProducts);
 

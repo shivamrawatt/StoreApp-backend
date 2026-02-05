@@ -2,6 +2,13 @@ const mongoose = require('mongoose');
 
 const productSchema = new mongoose.Schema(
   {
+    shopId: {                         // ⭐ NEW
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Shop',
+      required: true,
+      index: true,
+    },
+
     name: {
       type: String,
       required: true,
@@ -11,7 +18,6 @@ const productSchema = new mongoose.Schema(
     nameLower: {
       type: String,
       required: true,
-      unique: true,
       index: true,
     },
 
@@ -41,7 +47,12 @@ const productSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// 🔥 FIXED: Async hook (NO next())
+// ⭐ UNIQUE PER SHOP (NOT GLOBAL)
+productSchema.index(
+  { shopId: 1, nameLower: 1 },
+  { unique: true }
+);
+
 productSchema.pre('validate', async function () {
   if (this.name) {
     this.nameLower = this.name.trim().toLowerCase();

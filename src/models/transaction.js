@@ -2,6 +2,13 @@ const mongoose = require('mongoose');
 
 const transactionSchema = new mongoose.Schema(
   {
+    shopId: {                     // ⭐ NEW
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Shop',
+      required: true,
+      index: true,
+    },
+
     items: [
       {
         productId: {
@@ -16,15 +23,9 @@ const transactionSchema = new mongoose.Schema(
       },
     ],
 
-    total: {
-      type: Number,
-      required: true,
-    },
+    total: { type: Number, required: true },
 
-    time: {
-      type: Date,
-      default: Date.now,
-    },
+    time: { type: Date, default: Date.now },
 
     paymentMethod: {
       type: String,
@@ -38,16 +39,8 @@ const transactionSchema = new mongoose.Schema(
       default: 'PENDING',
     },
 
-    // 🔥 NEW FIELDS
-    customerName: {
-      type: String,
-      required: true,
-    },
-
-    customerMobile: {
-      type: String,
-      required: true,
-    },
+    customerName: { type: String, required: true },
+    customerMobile: { type: String, required: true },
 
     stripePaymentIntentId: String,
     stripeClientSecret: String,

@@ -1,9 +1,10 @@
-const User = require('../models/User');
+const User = require('../models/user');
+const PendingAdmin = require('../models/PendingAdmin');
+const Shop = require('../models/shop');
+
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-
-const PendingAdmin = require('../models/PendingAdmin');
-const sendEmail = require('../utils/sendEmail'); // ✅ fixed case
+const sendEmail = require('../utils/sendEmail');
 
 
 // ================= LOGIN =================
@@ -12,7 +13,9 @@ exports.login = async (req, res) => {
   try {
     const { username, password } = req.body;
 
-    const user = await User.findOne({ username });
+   const user = await User.findOne({ username })
+  .populate('shopId', 'name');
+
     if (!user) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
@@ -23,31 +26,50 @@ exports.login = async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user._id, role: user.role },
-      process.env.JWT_SECRET || 'dev_secret',
+      {
+        id: user._id,
+        role: user.role,
+        shopId: user.shopId
+      },
+      process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    res.json({
-      token,
-      user: {
-        id: user._id,
-        username: user.username,
-        role: user.role,
-      },
-    });
+   res.json({
+  token,
+  user: {
+    id: user._id,
+    username: user.username,
+    role: user.role,
+
+    shopId: user.shopId?._id,
+    shopName: user.shopId?.name,   // ⭐ ADD THIS
+
+    name: user.name,
+    email: user.email,
+    mobile: user.mobile,
+  },
+});
+
+
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
 
-// ================= ADMIN SIGNUP FLOW =================
+// ================= ADMIN SIGNUP STEP 1 =================
 
-// Step 1: Submit details → generate OTP → email owner
 exports.requestAdminWithDetails = async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const {
+      username,
+      password,
+      shopName,
+      name,
+      email,
+      mobile
+    } = req.body;
 
     const existing = await User.findOne({ username });
     if (existing) {
@@ -60,25 +82,31 @@ exports.requestAdminWithDetails = async (req, res) => {
     await PendingAdmin.create({
       username,
       password: hashedPassword,
+      shopName,
+      name,
+      email,
+      mobile,
       otp,
-      expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 min
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000),
       verified: false,
     });
 
     await sendEmail({
       to: process.env.OWNER_EMAIL,
       subject: 'Admin Approval OTP',
-      text: `OTP to approve admin "${username}": ${otp}\nValid for 5 minutes.`,
+      text: `OTP for admin "${username}" (shop: "${shopName}") = ${otp}`,
     });
 
     res.json({ message: 'OTP sent for admin approval' });
+
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
 
-// Step 2: Verify OTP → create admin
+// ================= ADMIN SIGNUP STEP 2 =================
+
 exports.verifyAdminOtpAndCreate = async (req, res) => {
   try {
     const { username, otp } = req.body;
@@ -94,17 +122,59 @@ exports.verifyAdminOtpAndCreate = async (req, res) => {
       return res.status(400).json({ message: 'Invalid or expired OTP' });
     }
 
+    const shop = await Shop.create({
+      name: pending.shopName,
+      ownerEmail: process.env.OWNER_EMAIL,
+      ownerUsername: pending.username,
+    });
+
     await User.create({
       username: pending.username,
       password: pending.password,
       role: 'admin',
+      shopId: shop._id,
+
+      // ✅ PROFILE FIELDS
+      name: pending.name,
+      email: pending.email,
+      mobile: pending.mobile,
     });
 
     pending.verified = true;
     await pending.save();
 
-    res.json({ message: 'Admin created successfully' });
+    res.json({ message: 'Admin + Shop created successfully' });
+
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+
+// ================= PROFILE =================
+
+exports.getMyProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.userId)
+      .select('-password')
+      .populate('shopId', 'name');
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json({
+      id: user._id,
+      username: user.username,
+      name: user.name,
+      email: user.email,
+      mobile: user.mobile,
+      role: user.role,
+      shopName: user.shopId?.name,
+      shopId: user.shopId?._id,
+    });
+
+  } catch (e) {
+    res.status(500).json({ message: e.message });
   }
 };
