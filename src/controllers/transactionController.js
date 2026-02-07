@@ -82,3 +82,22 @@ exports.getSummary = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+// DELETE TRANSACTION
+exports.deleteTransaction = async (req, res) => {
+  try {
+    const tx = await Transaction.findOneAndDelete({
+      _id: req.params.id,
+      shopId: req.shopId, // safety — only delete own shop data
+    });
+
+    if (!tx) {
+      return res.status(404).json({ message: 'Transaction not found' });
+    }
+
+    res.json({ message: 'Transaction deleted' });
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
