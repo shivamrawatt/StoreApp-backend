@@ -16,6 +16,23 @@ app.use(express.json());
 app.get('/api/health', (req, res) => {
   res.json({ status: 'Backend is running' });
 });
+app.get('/api/db-test', async (req, res) => {
+  try {
+    const [rows] = await db.query('SELECT 1 as test');
+    res.json({
+      success: true,
+      message: "DB connected",
+      result: rows
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "DB failed",
+      error: err.message
+    });
+  }
+});
 // ROUTES
 app.use('/api/products', productRoutes);
 app.use('/api/transactions', transactionRoutes);
