@@ -186,7 +186,7 @@ exports.getMyProfile = async (req, res) => {
 const db = require('../config/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const sendEmail = require('../utils/sendEmail');
+const sendEmail = require('../utils/SendEmail');
 
 
 // ================= LOGIN =================
