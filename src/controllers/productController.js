@@ -1,4 +1,4 @@
-const Product = require('../models/product.js');
+/* const Product = require('../models/product.js');
 
 // GET all products
 exports.getProducts = async (req, res) => {
@@ -176,3 +176,182 @@ exports.updateStock = async (req, res) => {
     res.status(400).json({ message: error.message });
   }
 };
+*/
+
+
+
+const db = require('../config/db');
+
+
+// ================= GET PRODUCTS =================
+
+exports.getProducts = async (req, res) => {
+  try {
+    const shopId = req.user.shopId;
+
+    const [rows] = await db.execute(
+      `SELECT * FROM products
+       WHERE shop_id = ?
+       ORDER BY name`,
+      [shopId]
+    );
+
+    res.json(rows);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch products' });
+  }
+};
+
+
+
+// ================= CREATE PRODUCT =================
+
+exports.createProduct = async (req, res) => {
+  try {
+    const { name, stock, price, unit } = req.body;
+    const shopId = req.user.shopId;
+
+    const image = req.file ? req.file.path : '';
+
+    const nameLower = name.trim().toLowerCase();
+
+    await db.execute(
+      `INSERT INTO products
+       (shop_id, name, name_lower, stock, unit, price, image)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [shopId, name, nameLower, stock, unit, price, image]
+    );
+
+    res.json({ message: 'Product created' });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Create failed' });
+  }
+};
+
+
+
+// ================= UPDATE PRODUCT =================
+
+exports.updateProduct = async (req, res) => {
+  try {
+    const id = req.params.id;
+    const shopId = req.user.shopId;
+
+    const { name, stock, price, unit } = req.body;
+
+    let sql = `
+      UPDATE products
+      SET name=?, name_lower=?, stock=?, price=?, unit=?
+    `;
+
+    const values = [
+      name,
+      name.trim().toLowerCase(),
+      stock,
+      price,
+      unit,
+    ];
+
+    if (req.file) {
+      sql += `, image=?`;
+      values.push(req.file.path);
+    }
+
+    sql += ` WHERE id=? AND shop_id=?`;
+    values.push(id, shopId);
+
+    await db.execute(sql, values);
+
+    res.json({ message: 'Product updated' });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Update failed' });
+  }
+};
+
+
+
+// ================= DELETE PRODUCT =================
+
+exports.deleteProduct = async (req, res) => {
+
+  console.log("DELETE ID:", req.params.id);
+console.log("SHOP:", req.shopId);
+
+  try {
+    const id = req.params.id;
+    const shopId = req.user.shopId;
+
+    await db.execute(
+      `DELETE FROM products
+       WHERE id=? AND shop_id=?`,
+      [id, shopId]
+    );
+
+    res.json({ message: 'Product deleted' });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Delete failed' });
+  }
+};
+
+
+
+// ================= UPDATE STOCK =================
+exports.updateStock = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { stock, change } = req.body;
+    const shopId = req.user.shopId;   // ⭐ FIXED
+
+    console.log("UPDATE STOCK INPUT:", {
+      id,
+      stock,
+      change,
+      shopId
+    });
+
+    if (!id) {
+      return res.status(400).json({ message: "Product id missing" });
+    }
+
+    if (stock !== undefined) {
+      await db.execute(`
+        UPDATE products
+        SET stock = ?
+        WHERE id = ?
+        AND shop_id = ?
+      `, [Number(stock), id, shopId]);
+
+      return res.json({ success: true, mode: "set" });
+    }
+
+    if (change !== undefined) {
+      await db.execute(`
+        UPDATE products
+        SET stock = stock + ?
+        WHERE id = ?
+        AND shop_id = ?
+      `, [Number(change), id, shopId]);
+
+      return res.json({ success: true, mode: "change" });
+    }
+
+    return res.status(400).json({
+      message: "Provide stock or change"
+    });
+
+  } catch (e) {
+    console.error("UPDATE STOCK ERROR:", e);
+    res.status(500).json({ message: e.message });
+  }
+};
+
+
+

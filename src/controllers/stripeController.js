@@ -1,4 +1,4 @@
-const stripe = require('../config/stripe');
+/*const stripe = require('../config/stripe');
 const Transaction = require('../models/transaction');
 
 // CREATE STRIPE PAYMENT INTENT
@@ -95,6 +95,164 @@ exports.markStripePaymentFailed = async (req, res) => {
   } catch {
     res.status(500).json({ message: 'Failed to mark payment as FAILED' });
   }
+};*/
+
+
+
+
+const stripe = require('../config/stripe');
+const db = require('../config/db');
+
+
+// ================= CREATE STRIPE PAYMENT INTENT =================
+
+exports.createStripePaymentIntent = async (req, res) => {
+  try {
+    const { transactionId } = req.body;
+
+    const [rows] = await db.execute(`
+      SELECT *
+      FROM transactions
+      WHERE id = ?
+      AND shop_id = ?
+    `, [transactionId, req.user.shopId]);
+
+    const tx = rows[0];
+
+    if (!tx) {
+      return res.status(404).json({ message: 'Transaction not found' });
+    }
+
+    if (tx.payment_method !== 'CARD') {
+      return res.status(400).json({ message: 'Stripe allowed only for CARD' });
+    }
+
+    if (tx.total < 50) {
+      return res.status(400).json({
+        message: 'Minimum card payment amount is ₹50',
+      });
+    }
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(tx.total * 100),
+      currency: 'inr',
+      metadata: {
+        transactionId: tx.id.toString(),
+        shopId: req.user.shopId.toString(),
+      },
+    });
+
+    await db.execute(`
+      UPDATE transactions
+      SET stripe_payment_intent_id = ?,
+          stripe_client_secret = ?
+      WHERE id = ?
+      AND shop_id = ?
+    `, [
+      paymentIntent.id,
+      paymentIntent.client_secret,
+      tx.id,
+      req.user.shopId
+    ]);
+
+    res.json({ clientSecret: paymentIntent.client_secret });
+
+  } catch (error) {
+    res.status(500).json({
+      message: error?.raw?.message || 'Stripe intent failed',
+    });
+  }
 };
+
+
+
+// ================= CONFIRM PAYMENT =================
+
+exports.confirmStripePayment = async (req, res) => {
+  const conn = await db.getConnection();
+
+  try {
+    const { transactionId } = req.body;
+    const shopId = req.user.shopId;
+
+    await conn.beginTransaction();
+
+    // ✅ prevent double confirm
+    const [txUpdate] = await conn.execute(`
+      UPDATE transactions
+      SET payment_status = 'PAID'
+      WHERE id = ?
+      AND shop_id = ?
+      AND payment_status != 'PAID'
+    `, [transactionId, shopId]);
+
+    if (txUpdate.affectedRows === 0) {
+      await conn.rollback();
+      conn.release();
+      return res.json({ alreadyPaid: true });
+    }
+
+    const [items] = await conn.execute(`
+      SELECT product_id, quantity
+      FROM transaction_items
+      WHERE transaction_id = ?
+    `, [transactionId]);
+
+    for (const it of items) {
+      const [r] = await conn.execute(`
+        UPDATE products
+        SET stock = stock - ?
+        WHERE id = ?
+        AND shop_id = ?
+        AND stock >= ?
+      `, [
+        it.quantity,
+        it.product_id,
+        shopId,
+        it.quantity
+      ]);
+
+      if (r.affectedRows === 0) {
+        throw new Error(`Stock conflict for product ${it.product_id}`);
+      }
+    }
+
+    await conn.commit();
+    conn.release();
+
+    res.json({ success: true });
+
+  } catch (error) {
+    await conn.rollback();
+    conn.release();
+    console.error("STRIPE CONFIRM ERROR:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+
+// ================= MARK FAILED =================
+
+exports.markStripePaymentFailed = async (req, res) => {
+  try {
+    const { transactionId } = req.body;
+
+    await db.execute(`
+      UPDATE transactions
+      SET payment_status = 'FAILED'
+      WHERE id = ?
+      AND shop_id = ?
+    `, [transactionId, req.user.shopId]);
+
+    res.json({ success: true });
+
+  } catch {
+    res.status(500).json({
+      message: 'Failed to mark payment as FAILED'
+    });
+  }
+};
+
 
 

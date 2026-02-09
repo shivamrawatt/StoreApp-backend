@@ -7,6 +7,7 @@ const authRoutes = require('./routes/authRoutes');
 const stripeRoutes = require('./routes/stripeRoutes');   // 👈 ADD
 
 const app = express();
+// const mongoose = require('mongoose');
 
 app.use(cors());
 app.use(express.json());
@@ -20,7 +21,11 @@ app.use('/api/products', productRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/stripe', stripeRoutes);   // 👈 ADD
-const mongoose = require('mongoose');
+app.use((err, req, res, next) => {
+  console.error("GLOBAL ERROR:", err);
+  res.status(500).json({ message: err.message });
+});
+
 
 
 module.exports = app;
