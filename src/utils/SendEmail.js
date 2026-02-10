@@ -1,35 +1,26 @@
-const nodemailer = require('nodemailer');
+const nodemailer = require("nodemailer");
+const brevoTransport = require("nodemailer-brevo-transport");
 
-
-
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.OWNER_EMAIL,
-    pass: process.env.OWNER_EMAIL_APP_PASSWORD,
-  },
-  connectionTimeout: 15000,
-  greetingTimeout: 15000,
-  socketTimeout: 15000
-});
-
-
-
-transporter.verify()
-  .then(() => console.log("✅ SMTP ready"))
-  .catch(err => console.error("❌ SMTP error:", err.message));
+const transporter = nodemailer.createTransport(
+  new brevoTransport({
+    apiKey: process.env.BREVO_API_KEY
+  })
+);
 
 const sendEmail = async ({ to, subject, text }) => {
-  const info = await transporter.sendMail({
-    from: `"Store App" <${process.env.OWNER_EMAIL}>`,
-    to,
-    subject,
-    text,
-  });
+  try {
+    const info = await transporter.sendMail({
+      from: process.env.OWNER_EMAIL,   // must be verified in Brevo
+      to,
+      subject,
+      text,
+    });
 
-  console.log("📨 Mail sent:", info.response);
+    console.log("📨 Brevo mail sent:", info.messageId);
+  } catch (err) {
+    console.error("❌ Brevo mail error:", err.message);
+    throw err;
+  }
 };
 
 module.exports = sendEmail;

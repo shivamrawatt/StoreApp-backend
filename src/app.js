@@ -46,17 +46,18 @@ app.get('/api/db-test', async (req, res) => {
   }
 });
 
+const sendEmail = require('./utils/SendEmail');
+
 app.get("/smtp-test", async (req,res)=>{
   try{
     await sendEmail({
       to: process.env.OWNER_EMAIL,
-      subject: "SMTP Test",
-      text: "SMTP working"
+      subject: "Brevo Test",
+      text: "Brevo mail working"
     });
 
-    res.send("Mail sent OK");
+    res.send("Brevo mail sent");
   } catch(e){
-    console.error(e);
     res.send(e.message);
   }
 });
