@@ -44,6 +44,15 @@ app.get('/api/db-test', async (req, res) => {
   }
 });
 
+app.get("/smtp-test", async (req,res)=>{
+  try{
+    await transporter.verify()
+    res.send("SMTP OK")
+  } catch(e){
+    res.send(e.message)
+  }
+});
+
 
 // ================= ROUTES =================
 app.use('/api/products', productRoutes);
