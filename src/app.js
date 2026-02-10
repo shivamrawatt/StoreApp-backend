@@ -46,7 +46,6 @@ app.get('/api/db-test', async (req, res) => {
   }
 });
 
-const sendEmail = require('./utils/SendEmail');
 
 app.get("/smtp-test", async (req,res)=>{
   try{
