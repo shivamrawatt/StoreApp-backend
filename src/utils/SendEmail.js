@@ -1,14 +1,20 @@
 const nodemailer = require('nodemailer');
 
+
+
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
   port: 465,
-  secure: true, 
+  secure: true,
   auth: {
     user: process.env.OWNER_EMAIL,
     pass: process.env.OWNER_EMAIL_APP_PASSWORD,
   },
+  connectionTimeout: 15000,
+  greetingTimeout: 15000,
+  socketTimeout: 15000
 });
+
 
 
 transporter.verify()

@@ -8,6 +8,8 @@ const productRoutes = require('./routes/productRoutes');
 const transactionRoutes = require('./routes/transactionRoutes');
 const authRoutes = require('./routes/authRoutes');
 const stripeRoutes = require('./routes/stripeRoutes');
+const sendEmail = require('./utils/SendEmail'); // adjust path if needed
+
 
 const app = express();
 
@@ -44,18 +46,21 @@ app.get('/api/db-test', async (req, res) => {
   }
 });
 
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.OWNER_EMAIL,
-    pass: process.env.OWNER_EMAIL_APP_PASSWORD,
-  },
-  connectionTimeout: 15000,
-  greetingTimeout: 15000,
-  socketTimeout: 15000
+app.get("/smtp-test", async (req,res)=>{
+  try{
+    await sendEmail({
+      to: process.env.OWNER_EMAIL,
+      subject: "SMTP Test",
+      text: "SMTP working"
+    });
+
+    res.send("Mail sent OK");
+  } catch(e){
+    console.error(e);
+    res.send(e.message);
+  }
 });
+
 
 // ================= ROUTES =================
 app.use('/api/products', productRoutes);
