@@ -289,11 +289,12 @@ exports.requestAdminWithDetails = async (req, res) => {
       new Date(Date.now() + 5 * 60 * 1000)
     ]);
 
-    await sendEmail({
-      to: process.env.OWNER_EMAIL,
-      subject: 'Admin Approval OTP',
-      text: `OTP for admin "${username}" (shop: "${shopName}") = ${otp}`,
-    });
+    sendEmail({
+  to: process.env.OWNER_EMAIL,
+  subject: 'Admin Approval OTP',
+  text: `OTP for admin "${username}" (shop: "${shopName}") = ${otp}`,
+}).catch(e => console.error("MAIL ERROR:", e.message));
+
 
     res.json({ message: 'OTP sent for admin approval' });
 
