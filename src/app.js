@@ -44,15 +44,18 @@ app.get('/api/db-test', async (req, res) => {
   }
 });
 
-app.get("/smtp-test", async (req,res)=>{
-  try{
-    await transporter.verify()
-    res.send("SMTP OK")
-  } catch(e){
-    res.send(e.message)
-  }
+const transporter = nodemailer.createTransport({
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true,
+  auth: {
+    user: process.env.OWNER_EMAIL,
+    pass: process.env.OWNER_EMAIL_APP_PASSWORD,
+  },
+  connectionTimeout: 15000,
+  greetingTimeout: 15000,
+  socketTimeout: 15000
 });
-
 
 // ================= ROUTES =================
 app.use('/api/products', productRoutes);
