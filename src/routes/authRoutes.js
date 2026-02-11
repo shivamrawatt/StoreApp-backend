@@ -5,19 +5,36 @@ const auth = require('../middleware/auth');
 
 const {
   login,
-  requestAdminWithDetails,
+  ownerInviteAdmin,
+  adminSignupWithInvite,
   verifyAdminOtpAndCreate,
   getMyProfile,
 } = require('../controllers/authController');
 
-// ADMIN SIGNUP FLOW
-router.post('/request-admin-with-details', requestAdminWithDetails);
-router.post('/verify-admin-otp', verifyAdminOtpAndCreate);
 
-// LOGIN
+/* ===============================
+   OWNER → INVITE ADMIN
+================================ */
+router.post('/owner/invite-admin', auth, ownerInviteAdmin);
+
+
+/* ===============================
+   ADMIN SIGNUP (INVITE FLOW)
+================================ */
+router.post('/admin/signup-invite', adminSignupWithInvite);
+router.post('/admin/verify-otp', verifyAdminOtpAndCreate);
+
+
+/* ===============================
+   LOGIN
+================================ */
 router.post('/login', login);
 
-// PROFILE
+
+/* ===============================
+   PROFILE
+================================ */
 router.get('/me', auth, getMyProfile);
+
 
 module.exports = router;
