@@ -182,16 +182,117 @@ exports.getMyProfile = async (req, res) => {
 
 
 
-
 const db = require('../config/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const sendEmail = require('../utils/SendEmail');
-const crypto = require('crypto');
 
 
 /* =====================================================
-   LOGIN
+   SIGNUP REQUEST — CREATE USER + SEND OTP
+===================================================== */
+
+exports.signupRequest = async (req, res) => {
+  try {
+    const { username, password, name, email, mobile } = req.body;
+
+    // check existing user
+    const [exist] = await db.execute(
+      "SELECT id FROM users WHERE username=? OR email=?",
+      [username, email]
+    );
+
+    if (exist.length > 0) {
+      return res.status(400).json({ message: "User already exists" });
+    }
+
+    const hashed = await bcrypt.hash(password, 10);
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    await db.execute(`
+      INSERT INTO users
+      (username,password,name,email,mobile,role,email_verified,otp,otp_expires,subscription_status)
+      VALUES (?,?,?,?,?,'admin',0,?,?,'inactive')
+    `, [
+      username,
+      hashed,
+      name,
+      email,
+      mobile,
+      otp,
+      new Date(Date.now() + 5 * 60 * 1000)
+    ]);
+
+    await sendEmail({
+      to: email,
+      subject: "Verify your admin account",
+      text: `Your verification OTP is: ${otp}`
+    });
+
+    res.json({ message: "OTP sent to email" });
+
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+};
+
+
+
+/* =====================================================
+   VERIFY OTP — CREATE SHOP + ACTIVATE USER
+===================================================== */
+
+exports.signupVerify = async (req, res) => {
+  const conn = await db.getConnection();
+
+  try {
+    const { email, otp, shopName } = req.body;
+
+    const [[user]] = await conn.execute(`
+      SELECT * FROM users
+      WHERE email=? AND otp=? AND email_verified=0
+            AND otp_expires > NOW()
+    `, [email, otp]);
+
+    if (!user) {
+      conn.release();
+      return res.status(400).json({ message: "Invalid or expired OTP" });
+    }
+
+    await conn.beginTransaction();
+
+    // create shop
+    const [shop] = await conn.execute(`
+      INSERT INTO shops (name, owner_email, owner_username)
+      VALUES (?,?,?)
+    `, [shopName, email, user.username]);
+
+    // activate user
+    await conn.execute(`
+      UPDATE users
+      SET email_verified=1,
+          otp=NULL,
+          otp_expires=NULL,
+          shop_id=?
+      WHERE id=?
+    `, [shop.insertId, user.id]);
+
+    await conn.commit();
+    conn.release();
+
+    res.json({ message: "Account verified and shop created" });
+
+  } catch (e) {
+    await conn.rollback();
+    conn.release();
+    res.status(500).json({ message: e.message });
+  }
+};
+
+
+
+/* =====================================================
+   LOGIN — ALLOW ONLY VERIFIED EMAIL
 ===================================================== */
 
 exports.login = async (req, res) => {
@@ -201,19 +302,33 @@ exports.login = async (req, res) => {
     const [rows] = await db.execute(`
       SELECT u.*, s.id AS shopId, s.name AS shopName
       FROM users u
-      JOIN shops s ON u.shop_id = s.id
+      LEFT JOIN shops s ON u.shop_id = s.id
       WHERE u.username = ?
     `, [username]);
 
     const user = rows[0];
 
-    if (!user) return res.status(401).json({ message: 'Invalid credentials' });
+    if (!user) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(401).json({ message: 'Invalid credentials' });
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    if (!user.email_verified) {
+      return res.status(403).json({
+        message: "Please verify your email OTP first"
+      });
+    }
 
     const token = jwt.sign(
-      { id: user.id, role: user.role, shopId: user.shop_id },
+      {
+        id: user.id,
+        role: user.role,
+        shopId: user.shop_id
+      },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -229,7 +344,8 @@ exports.login = async (req, res) => {
         name: user.name,
         email: user.email,
         mobile: user.mobile,
-      },
+        subscriptionStatus: user.subscription_status
+      }
     });
 
   } catch (e) {
@@ -237,153 +353,38 @@ exports.login = async (req, res) => {
   }
 };
 
-
-/* =====================================================
-   OWNER INVITE ADMIN
-===================================================== */
-
-exports.ownerInviteAdmin = async (req, res) => {
-  try {
-    const { email } = req.body;
-
-    const token = crypto.randomBytes(32).toString('hex');
-    const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-    await db.execute(`
-      INSERT INTO pending_admins (email, invite_token, invite_expires, verified)
-      VALUES (?,?,?,0)
-    `, [email, token, expiry]);
-
-    const inviteLink = `${process.env.FRONTEND_URL}/admin-signup?token=${token}`;
-
-    await sendEmail({
-      to: email,
-      subject: "Admin Invite",
-      text: `Register here:\n${inviteLink}`
-    });
-
-    res.json({ message: "Invite sent" });
-
-  } catch (e) {
-    res.status(500).json({ message: e.message });
-  }
-};
-
-
-/* =====================================================
-   ADMIN SIGNUP WITH INVITE
-===================================================== */
-
-exports.adminSignupWithInvite = async (req, res) => {
-  try {
-    const { token, username, password, shopName, name, email, mobile } = req.body;
-
-    const [inviteRows] = await db.execute(`
-      SELECT * FROM pending_admins
-      WHERE invite_token=? AND invite_expires > NOW() AND verified=0
-    `, [token]);
-
-    if (inviteRows.length === 0)
-      return res.status(400).json({ message: "Invalid invite" });
-
-    const [exist] = await db.execute(
-      "SELECT id FROM users WHERE username=?",
-      [username]
-    );
-
-    if (exist.length > 0)
-      return res.status(400).json({ message: "Username exists" });
-
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const hashed = await bcrypt.hash(password, 10);
-
-    await db.execute(`
-      UPDATE pending_admins
-      SET username=?, password=?, shop_name=?, name=?, mobile=?, otp=?, expires_at=?, email=?
-      WHERE invite_token=?
-    `, [
-      username, hashed, shopName, name, mobile,
-      otp, new Date(Date.now()+5*60*1000), email, token
-    ]);
-
-    await sendEmail({
-      to: email,
-      subject: "Admin OTP",
-      text: `Your OTP: ${otp}`
-    });
-
-    res.json({ message: "OTP sent" });
-
-  } catch (e) {
-    res.status(500).json({ message: e.message });
-  }
-};
-
-
-/* =====================================================
-   VERIFY OTP + CREATE ADMIN
-===================================================== */
-
-exports.verifyAdminOtpAndCreate = async (req, res) => {
-  const conn = await db.getConnection();
-
-  try {
-    const { username, otp } = req.body;
-
-    const [rows] = await conn.execute(`
-      SELECT * FROM pending_admins
-      WHERE username=? AND otp=? AND verified=0 AND expires_at > NOW()
-    `,[username, otp]);
-
-    const p = rows[0];
-    if (!p) {
-      conn.release();
-      return res.status(400).json({ message: "Invalid OTP" });
-    }
-
-    await conn.beginTransaction();
-
-    const [shop] = await conn.execute(`
-      INSERT INTO shops (name, owner_email, owner_username)
-      VALUES (?,?,?)
-    `,[p.shop_name, process.env.OWNER_EMAIL, p.username]);
-
-    await conn.execute(`
-      INSERT INTO users
-      (username,password,role,shop_id,name,email,mobile)
-      VALUES (?,?,?,?,?,?,?)
-    `,[p.username,p.password,'admin',shop.insertId,p.name,p.email,p.mobile]);
-
-    await conn.execute(`
-      UPDATE pending_admins SET verified=1 WHERE id=?
-    `,[p.id]);
-
-    await conn.commit();
-    conn.release();
-
-    res.json({ message: "Admin created" });
-
-  } catch(e){
-    await conn.rollback();
-    conn.release();
-    res.status(500).json({ message:e.message });
-  }
-};
 
 
 /* =====================================================
    PROFILE
 ===================================================== */
 
-exports.getMyProfile = async (req,res)=>{
-  const [rows] = await db.execute(`
-    SELECT u.id,u.username,u.name,u.email,u.mobile,u.role,
-           s.id shopId, s.name shopName
-    FROM users u
-    JOIN shops s ON u.shop_id=s.id
-    WHERE u.id=?
-  `,[req.userId]);
+exports.getMyProfile = async (req, res) => {
+  try {
+    const [rows] = await db.execute(`
+      SELECT
+        u.id,
+        u.username,
+        u.name,
+        u.email,
+        u.mobile,
+        u.role,
+        u.subscription_status,
+        u.subscription_expires,
+        s.id AS shopId,
+        s.name AS shopName
+      FROM users u
+      LEFT JOIN shops s ON u.shop_id = s.id
+      WHERE u.id = ?
+    `, [req.userId]);
 
-  res.json(rows[0]);
+    if (!rows[0]) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json(rows[0]);
+
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
 };
-
