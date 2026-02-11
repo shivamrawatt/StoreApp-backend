@@ -3,6 +3,8 @@ const router = express.Router();
 
 const upload = require('../middleware/upload'); // ✅ Cloudinary upload middleware
 const auth = require('../middleware/auth');
+const requireSubscription = require('../middleware/requireSubscription');
+
 const {
   getProducts,
   createProduct,
@@ -11,7 +13,8 @@ const {
   updateStock,
 } = require('../controllers/productController');
 
-router.use(auth); 
+router.use(auth);
+router.use(requireSubscription); 
 // GET all products
 router.get('/', getProducts);
 
