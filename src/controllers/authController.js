@@ -187,110 +187,6 @@ const db = require('../config/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const sendEmail = require('../utils/SendEmail');
-
-
-// ================= LOGIN =================
-
-exports.login = async (req, res) => {
-  try {
-    const { username, password } = req.body;
-
-    const [rows] = await db.execute(`
-      SELECT 
-        u.*,
-        s.id   AS shopId,
-        s.name AS shopName
-      FROM users u
-      JOIN shops s ON u.shop_id = s.id
-      WHERE u.username = ?
-    `, [username]);
-
-    const user = rows[0];
-
-    if (!user) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-
-    const token = jwt.sign(
-      {
-        id: user.id,
-        role: user.role,
-        shopId: user.shop_id
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        username: user.username,
-        role: user.role,
-        shopId: user.shop_id,
-        shopName: user.shopName,
-        name: user.name,
-        email: user.email,
-        mobile: user.mobile,
-      },
-    });
-
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-
-
-// ================= ADMIN SIGNUP STEP 1 =================
-
-exports.requestAdminWithDetails = async (req, res) => {
-  try {
-    const {
-      username,
-      password,
-      shopName,
-      name,
-      email,
-      mobile
-    } = req.body;
-
-    // check existing username
-    const [exist] = await db.execute(
-      "SELECT id FROM users WHERE username = ?",
-      [username]
-    );
-
-    if (exist.length > 0) {
-      return res.status(400).json({ message: 'Username already exists' });
-    }
-
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    await db.execute(`
-      INSERT INTO pending_admins
-      (username,password,shop_name,name,email,mobile,otp,verified,expires_at)
-      VALUES (?,?,?,?,?,?,?,?,?)
-    `, [
-      username,
-      hashedPassword,
-      shopName,
-      name,
-      email,
-      mobile,
-      otp,
-      0,
-      new Date(Date.now() + 5 * 60 * 1000)
-    ]);const db = require('../config/db');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const sendEmail = require('../utils/SendEmail');
 const crypto = require('crypto');
 
 
@@ -303,10 +199,7 @@ exports.login = async (req, res) => {
     const { username, password } = req.body;
 
     const [rows] = await db.execute(`
-      SELECT 
-        u.*,
-        s.id   AS shopId,
-        s.name AS shopName
+      SELECT u.*, s.id AS shopId, s.name AS shopName
       FROM users u
       JOIN shops s ON u.shop_id = s.id
       WHERE u.username = ?
@@ -314,21 +207,13 @@ exports.login = async (req, res) => {
 
     const user = rows[0];
 
-    if (!user) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
+    if (!user) return res.status(401).json({ message: 'Invalid credentials' });
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
+    if (!isMatch) return res.status(401).json({ message: 'Invalid credentials' });
 
     const token = jwt.sign(
-      {
-        id: user.id,
-        role: user.role,
-        shopId: user.shop_id
-      },
+      { id: user.id, role: user.role, shopId: user.shop_id },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -347,15 +232,14 @@ exports.login = async (req, res) => {
       },
     });
 
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+  } catch (e) {
+    res.status(500).json({ message: e.message });
   }
 };
 
 
-
 /* =====================================================
-   OWNER → INVITE ADMIN (NEW METHOD)
+   OWNER INVITE ADMIN
 ===================================================== */
 
 exports.ownerInviteAdmin = async (req, res) => {
@@ -363,11 +247,10 @@ exports.ownerInviteAdmin = async (req, res) => {
     const { email } = req.body;
 
     const token = crypto.randomBytes(32).toString('hex');
-    const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
+    const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     await db.execute(`
-      INSERT INTO pending_admins
-      (email, invite_token, invite_expires, verified)
+      INSERT INTO pending_admins (email, invite_token, invite_expires, verified)
       VALUES (?,?,?,0)
     `, [email, token, expiry]);
 
@@ -376,10 +259,10 @@ exports.ownerInviteAdmin = async (req, res) => {
     await sendEmail({
       to: email,
       subject: "Admin Invite",
-      text: `You are invited to create admin account.\nRegister here:\n${inviteLink}`
+      text: `Register here:\n${inviteLink}`
     });
 
-    res.json({ message: "Invite sent successfully" });
+    res.json({ message: "Invite sent" });
 
   } catch (e) {
     res.status(500).json({ message: e.message });
@@ -387,80 +270,49 @@ exports.ownerInviteAdmin = async (req, res) => {
 };
 
 
-
 /* =====================================================
-   ADMIN SIGNUP USING INVITE TOKEN
+   ADMIN SIGNUP WITH INVITE
 ===================================================== */
 
 exports.adminSignupWithInvite = async (req, res) => {
   try {
-    const {
-      token,
-      username,
-      password,
-      shopName,
-      name,
-      email,
-      mobile
-    } = req.body;
+    const { token, username, password, shopName, name, email, mobile } = req.body;
 
-    // validate invite
     const [inviteRows] = await db.execute(`
-      SELECT *
-      FROM pending_admins
-      WHERE invite_token = ?
-        AND invite_expires > NOW()
-        AND verified = 0
+      SELECT * FROM pending_admins
+      WHERE invite_token=? AND invite_expires > NOW() AND verified=0
     `, [token]);
 
-    if (inviteRows.length === 0) {
-      return res.status(400).json({ message: "Invalid or expired invite" });
-    }
+    if (inviteRows.length === 0)
+      return res.status(400).json({ message: "Invalid invite" });
 
-    // username check
     const [exist] = await db.execute(
-      "SELECT id FROM users WHERE username = ?",
+      "SELECT id FROM users WHERE username=?",
       [username]
     );
 
-    if (exist.length > 0) {
-      return res.status(400).json({ message: 'Username already exists' });
-    }
+    if (exist.length > 0)
+      return res.status(400).json({ message: "Username exists" });
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashed = await bcrypt.hash(password, 10);
 
     await db.execute(`
       UPDATE pending_admins
-      SET
-        username=?,
-        password=?,
-        shop_name=?,
-        name=?,
-        mobile=?,
-        otp=?,
-        expires_at=?,
-        email=?
+      SET username=?, password=?, shop_name=?, name=?, mobile=?, otp=?, expires_at=?, email=?
       WHERE invite_token=?
     `, [
-      username,
-      hashedPassword,
-      shopName,
-      name,
-      mobile,
-      otp,
-      new Date(Date.now() + 5 * 60 * 1000),
-      email,
-      token
+      username, hashed, shopName, name, mobile,
+      otp, new Date(Date.now()+5*60*1000), email, token
     ]);
 
     await sendEmail({
       to: email,
-      subject: "Verify Admin Email OTP",
-      text: `Your admin verification OTP is: ${otp}`
+      subject: "Admin OTP",
+      text: `Your OTP: ${otp}`
     });
 
-    res.json({ message: "OTP sent to admin email" });
+    res.json({ message: "OTP sent" });
 
   } catch (e) {
     res.status(500).json({ message: e.message });
@@ -468,9 +320,8 @@ exports.adminSignupWithInvite = async (req, res) => {
 };
 
 
-
 /* =====================================================
-   VERIFY ADMIN EMAIL OTP + CREATE ACCOUNT
+   VERIFY OTP + CREATE ADMIN
 ===================================================== */
 
 exports.verifyAdminOtpAndCreate = async (req, res) => {
@@ -480,226 +331,59 @@ exports.verifyAdminOtpAndCreate = async (req, res) => {
     const { username, otp } = req.body;
 
     const [rows] = await conn.execute(`
-      SELECT *
-      FROM pending_admins
-      WHERE username = ?
-        AND otp = ?
-        AND verified = 0
-        AND expires_at > NOW()
-    `, [username, otp]);
+      SELECT * FROM pending_admins
+      WHERE username=? AND otp=? AND verified=0 AND expires_at > NOW()
+    `,[username, otp]);
 
-    const pending = rows[0];
-
-    if (!pending) {
+    const p = rows[0];
+    if (!p) {
       conn.release();
-      return res.status(400).json({ message: 'Invalid or expired OTP' });
+      return res.status(400).json({ message: "Invalid OTP" });
     }
 
     await conn.beginTransaction();
 
-    // create shop
-    const [shopResult] = await conn.execute(`
-      INSERT INTO shops
-      (name, owner_email, owner_username)
+    const [shop] = await conn.execute(`
+      INSERT INTO shops (name, owner_email, owner_username)
       VALUES (?,?,?)
-    `, [
-      pending.shop_name,
-      process.env.OWNER_EMAIL,
-      pending.username
-    ]);
+    `,[p.shop_name, process.env.OWNER_EMAIL, p.username]);
 
-    const shopId = shopResult.insertId;
-
-    // create admin user
     await conn.execute(`
       INSERT INTO users
       (username,password,role,shop_id,name,email,mobile)
       VALUES (?,?,?,?,?,?,?)
-    `, [
-      pending.username,
-      pending.password,
-      'admin',
-      shopId,
-      pending.name,
-      pending.email,
-      pending.mobile
-    ]);
+    `,[p.username,p.password,'admin',shop.insertId,p.name,p.email,p.mobile]);
 
-    // mark invite + pending verified
     await conn.execute(`
-      UPDATE pending_admins
-      SET verified = 1, email_verified = 1
-      WHERE id = ?
-    `, [pending.id]);
+      UPDATE pending_admins SET verified=1 WHERE id=?
+    `,[p.id]);
 
     await conn.commit();
     conn.release();
 
-    res.json({ message: 'Admin + Shop created successfully' });
+    res.json({ message: "Admin created" });
 
-  } catch (error) {
+  } catch(e){
     await conn.rollback();
     conn.release();
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message:e.message });
   }
 };
-
 
 
 /* =====================================================
    PROFILE
 ===================================================== */
 
-exports.getMyProfile = async (req, res) => {
-  try {
-    const [rows] = await db.execute(`
-      SELECT
-        u.id,
-        u.username,
-        u.name,
-        u.email,
-        u.mobile,
-        u.role,
-        s.id   AS shopId,
-        s.name AS shopName
-      FROM users u
-      JOIN shops s ON u.shop_id = s.id
-      WHERE u.id = ?
-    `, [req.userId]);
+exports.getMyProfile = async (req,res)=>{
+  const [rows] = await db.execute(`
+    SELECT u.id,u.username,u.name,u.email,u.mobile,u.role,
+           s.id shopId, s.name shopName
+    FROM users u
+    JOIN shops s ON u.shop_id=s.id
+    WHERE u.id=?
+  `,[req.userId]);
 
-    const user = rows[0];
-
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    res.json(user);
-
-  } catch (e) {
-    res.status(500).json({ message: e.message });
-  }
+  res.json(rows[0]);
 };
 
-
-    sendEmail({
-  to: process.env.OWNER_EMAIL,
-  subject: 'Admin Approval OTP',
-  text: `OTP for admin "${username}" (shop: "${shopName}") = ${otp}`,
-}).catch(e => console.error("MAIL ERROR:", e.message));
-
-
-    res.json({ message: 'OTP sent for admin approval' });
-
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-
-
-// ================= ADMIN SIGNUP STEP 2 =================
-
-exports.verifyAdminOtpAndCreate = async (req, res) => {
-  const conn = await db.getConnection();
-
-  try {
-    const { username, otp } = req.body;
-
-    const [rows] = await conn.execute(`
-      SELECT *
-      FROM pending_admins
-      WHERE username = ?
-        AND otp = ?
-        AND verified = 0
-        AND expires_at > NOW()
-    `, [username, otp]);
-
-    const pending = rows[0];
-
-    if (!pending) {
-      conn.release();
-      return res.status(400).json({ message: 'Invalid or expired OTP' });
-    }
-
-    await conn.beginTransaction();
-
-    // create shop
-    const [shopResult] = await conn.execute(`
-      INSERT INTO shops
-      (name, owner_email, owner_username)
-      VALUES (?,?,?)
-    `, [
-      pending.shop_name,
-      process.env.OWNER_EMAIL,
-      pending.username
-    ]);
-
-    const shopId = shopResult.insertId;
-
-    // create admin user
-    await conn.execute(`
-      INSERT INTO users
-      (username,password,role,shop_id,name,email,mobile)
-      VALUES (?,?,?,?,?,?,?)
-    `, [
-      pending.username,
-      pending.password,
-      'admin',
-      shopId,
-      pending.name,
-      pending.email,
-      pending.mobile
-    ]);
-
-    // mark pending verified
-    await conn.execute(`
-      UPDATE pending_admins
-      SET verified = 1
-      WHERE id = ?
-    `, [pending.id]);
-
-    await conn.commit();
-    conn.release();
-
-    res.json({ message: 'Admin + Shop created successfully' });
-
-  } catch (error) {
-    await conn.rollback();
-    conn.release();
-    res.status(500).json({ message: error.message });
-  }
-};
-
-
-
-// ================= PROFILE =================
-
-exports.getMyProfile = async (req, res) => {
-  try {
-    const [rows] = await db.execute(`
-      SELECT
-        u.id,
-        u.username,
-        u.name,
-        u.email,
-        u.mobile,
-        u.role,
-        s.id   AS shopId,
-        s.name AS shopName
-      FROM users u
-      JOIN shops s ON u.shop_id = s.id
-      WHERE u.id = ?
-    `, [req.userId]);
-
-    const user = rows[0];
-
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    res.json(user);
-
-  } catch (e) {
-    res.status(500).json({ message: e.message });
-  }
-};
