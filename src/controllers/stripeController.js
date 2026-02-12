@@ -303,6 +303,35 @@ exports.createSubscriptionCheckout = async (req, res) => {
   }
 };
 
+// stripeController.js
+
+exports.createSubscriptionIntent = async (req, res) => {
+  const { plan } = req.body;
+
+  const prices = {
+    weekly: 5900,
+    monthly: 14900,
+    annual: 139900,
+  };
+
+  const amount = prices[plan];
+
+  const intent = await stripe.paymentIntents.create({
+    amount,
+    currency: 'inr',
+    metadata: {
+      type: 'subscription',
+      plan,
+      userId: req.user.id,
+    },
+  });
+
+  res.json({
+    clientSecret: intent.client_secret,
+  });
+};
+
+
 
 
 

@@ -20,5 +20,11 @@ router.post('/failed', markStripePaymentFailed);
 
 /* ===== SUBSCRIPTION CHECKOUT ===== */
 router.post('/subscription-checkout', createSubscriptionCheckout);
+router.post(
+  '/subscription-intent',
+  requireAuth,
+  stripeController.createSubscriptionIntent
+);
+
 
 module.exports = router;
