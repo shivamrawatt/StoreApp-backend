@@ -17,7 +17,43 @@ exports.handleStripeWebhook = async (req, res) => {
     return res.sendStatus(400);
   }
 
-  // ===== CHECKOUT SESSION COMPLETED =====
+  /* =================================================
+     PAYMENT SHEET — SUBSCRIPTION INTENT SUCCESS
+  ================================================= */
+
+  if (event.type === 'payment_intent.succeeded') {
+    const pi = event.data.object;
+
+    if (pi.metadata?.type === 'subscription') {
+      const userId = pi.metadata.userId;
+      const plan = pi.metadata.plan;
+
+      const daysMap = {
+        weekly: 7,
+        monthly: 30,
+        annual: 365,
+      };
+
+      const days = daysMap[plan] || 0;
+
+      const expires = new Date();
+      expires.setDate(expires.getDate() + days);
+
+      await db.execute(`
+        UPDATE users
+        SET subscription_status = 'active',
+            subscription_plan = ?,
+            subscription_expires = ?
+        WHERE id = ?
+      `, [plan, expires, userId]);
+
+      console.log("✅ Subscription updated:", userId, plan);
+    }
+  }
+
+  /* =================================================
+     OLD CHECKOUT FLOW (keep for safety)
+  ================================================= */
 
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
@@ -36,7 +72,7 @@ exports.handleStripeWebhook = async (req, res) => {
         WHERE id = ?
       `, [expires, userId]);
 
-      console.log("✅ Subscription activated for user", userId);
+      console.log("✅ Checkout subscription activated:", userId);
     }
   }
 
