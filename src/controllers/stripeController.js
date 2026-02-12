@@ -254,5 +254,55 @@ exports.markStripePaymentFailed = async (req, res) => {
   }
 };
 
+// ================= SUBSCRIPTION CHECKOUT =================
+
+const PLAN_MAP = {
+  weekly:  { amount: 5900, name: 'Weekly Subscription', days: 7 },
+  monthly: { amount: 14900, name: 'Monthly Subscription', days: 30 },
+  annual:  { amount: 139900, name: 'Annual Subscription', days: 365 },
+};
+
+exports.createSubscriptionCheckout = async (req, res) => {
+  try {
+    const { plan } = req.body;
+
+    const p = PLAN_MAP[plan];
+    if (!p) {
+      return res.status(400).json({ message: 'Invalid plan' });
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      payment_method_types: ['card'],
+
+      line_items: [{
+        price_data: {
+          currency: 'inr',
+          product_data: { name: p.name },
+          unit_amount: p.amount,
+        },
+        quantity: 1,
+      }],
+
+      success_url: process.env.CLIENT_URL + '/payment-success',
+      cancel_url: process.env.CLIENT_URL + '/payment-cancel',
+
+      metadata: {
+        payment_type: 'subscription',
+        userId: req.user.id.toString(),
+        plan,
+        days: p.days.toString(),
+      },
+    });
+
+    res.json({ url: session.url });
+
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Subscription checkout failed' });
+  }
+};
+
+
 
 

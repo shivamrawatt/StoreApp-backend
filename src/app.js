@@ -1,52 +1,41 @@
 const express = require('express');
 const cors = require('cors');
 
-// ✅ DB IMPORT (FIX)
 const db = require('./config/db');
 
 const productRoutes = require('./routes/productRoutes');
 const transactionRoutes = require('./routes/transactionRoutes');
 const authRoutes = require('./routes/authRoutes');
 const stripeRoutes = require('./routes/stripeRoutes');
-const sendEmail = require('./utils/SendEmail'); // adjust path if needed
-
+const sendEmail = require('./utils/SendEmail');
 
 const app = express();
 
-// MIDDLEWARE
+/* ================= CORS ================= */
 app.use(cors());
+
+/* ================= STRIPE WEBHOOK — MUST BE BEFORE express.json ================= */
+app.use('/stripe', require('./routes/webhookRoutes'));
+
+/* ================= NORMAL JSON PARSER ================= */
 app.use(express.json());
 
-
-// ================= HEALTH CHECK =================
+/* ================= HEALTH CHECK ================= */
 app.get('/api/health', (req, res) => {
   res.json({ status: 'Backend is running' });
 });
 
-
-// ================= DB TEST ROUTE =================
+/* ================= DB TEST ================= */
 app.get('/api/db-test', async (req, res) => {
   try {
     const [rows] = await db.query('SELECT 1 as test');
-
-    res.json({
-      success: true,
-      message: "DB connected",
-      result: rows
-    });
-
+    res.json({ success: true, message: "DB connected", result: rows });
   } catch (err) {
-    console.error("DB TEST ERROR:", err);
-
-    res.status(500).json({
-      success: false,
-      message: "DB failed",
-      error: err.message
-    });
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 
-
+/* ================= SMTP TEST ================= */
 app.get("/smtp-test", async (req,res)=>{
   try{
     await sendEmail({
@@ -54,26 +43,22 @@ app.get("/smtp-test", async (req,res)=>{
       subject: "Brevo Test",
       text: "Brevo mail working"
     });
-
     res.send("Brevo mail sent");
   } catch(e){
     res.send(e.message);
   }
 });
 
-
-// ================= ROUTES =================
+/* ================= API ROUTES ================= */
 app.use('/api/products', productRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/stripe', stripeRoutes);
 
-
-// ================= GLOBAL ERROR HANDLER =================
+/* ================= ERROR HANDLER ================= */
 app.use((err, req, res, next) => {
   console.error("GLOBAL ERROR:", err);
   res.status(500).json({ message: err.message });
 });
-
 
 module.exports = app;
