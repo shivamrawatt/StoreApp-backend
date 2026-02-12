@@ -17,15 +17,18 @@ exports.handleStripeWebhook = async (req, res) => {
     return res.sendStatus(400);
   }
 
-  /* =================================================
-     PAYMENT SHEET — SUBSCRIPTION INTENT SUCCESS
-  ================================================= */
+  /* ============================================
+     PAYMENT SHEET SUBSCRIPTION SUCCESS
+  ============================================ */
 
   if (event.type === 'payment_intent.succeeded') {
     const pi = event.data.object;
 
+    console.log("WEBHOOK HIT payment_intent.succeeded");
+    console.log("META:", pi.metadata);
+
     if (pi.metadata?.type === 'subscription') {
-      const userId = pi.metadata.userId;
+      const userId = Number(pi.metadata.userId);
       const plan = pi.metadata.plan;
 
       const daysMap = {
@@ -39,7 +42,7 @@ exports.handleStripeWebhook = async (req, res) => {
       const expires = new Date();
       expires.setDate(expires.getDate() + days);
 
-      await db.execute(`
+      const [r] = await db.execute(`
         UPDATE users
         SET subscription_status = 'active',
             subscription_plan = ?,
@@ -47,32 +50,8 @@ exports.handleStripeWebhook = async (req, res) => {
         WHERE id = ?
       `, [plan, expires, userId]);
 
-      console.log("✅ Subscription updated:", userId, plan);
-    }
-  }
-
-  /* =================================================
-     OLD CHECKOUT FLOW (keep for safety)
-  ================================================= */
-
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
-
-    if (session.metadata?.payment_type === 'subscription') {
-      const userId = session.metadata.userId;
-      const days = Number(session.metadata.days);
-
-      const expires = new Date();
-      expires.setDate(expires.getDate() + days);
-
-      await db.execute(`
-        UPDATE users
-        SET subscription_status = 'active',
-            subscription_expires = ?
-        WHERE id = ?
-      `, [expires, userId]);
-
-      console.log("✅ Checkout subscription activated:", userId);
+      console.log("UPDATED ROWS:", r.affectedRows);
+      console.log("✅ Subscription upgraded:", userId, plan);
     }
   }
 

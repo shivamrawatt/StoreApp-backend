@@ -103,8 +103,9 @@ exports.markStripePaymentFailed = async (req, res) => {
 const stripe = require('../config/stripe');
 const db = require('../config/db');
 
-
-// ================= CREATE STRIPE PAYMENT INTENT =================
+/* =====================================================
+   PRODUCT CARD PAYMENT — INTENT
+===================================================== */
 
 exports.createStripePaymentIntent = async (req, res) => {
   try {
@@ -133,31 +134,31 @@ exports.createStripePaymentIntent = async (req, res) => {
       });
     }
 
-    const paymentIntent = await stripe.paymentIntents.create({
+    const intent = await stripe.paymentIntents.create({
       amount: Math.round(tx.total * 100),
       currency: 'inr',
       metadata: {
-        transactionId: tx.id.toString(),
-        shopId: req.user.shopId.toString(),
+        type: 'product',
+        transactionId: String(tx.id),
+        shopId: String(req.user.shopId),
       },
     });
 
     await db.execute(`
       UPDATE transactions
-      SET stripe_payment_intent_id = ?,
-          stripe_client_secret = ?
-      WHERE id = ?
-      AND shop_id = ?
+      SET stripe_payment_intent_id = ?, stripe_client_secret = ?
+      WHERE id = ? AND shop_id = ?
     `, [
-      paymentIntent.id,
-      paymentIntent.client_secret,
+      intent.id,
+      intent.client_secret,
       tx.id,
       req.user.shopId
     ]);
 
-    res.json({ clientSecret: paymentIntent.client_secret });
+    res.json({ clientSecret: intent.client_secret });
 
   } catch (error) {
+    console.error("CREATE INTENT ERROR:", error);
     res.status(500).json({
       message: error?.raw?.message || 'Stripe intent failed',
     });
@@ -165,8 +166,9 @@ exports.createStripePaymentIntent = async (req, res) => {
 };
 
 
-
-// ================= CONFIRM PAYMENT =================
+/* =====================================================
+   PRODUCT CARD PAYMENT — CONFIRM
+===================================================== */
 
 exports.confirmStripePayment = async (req, res) => {
   const conn = await db.getConnection();
@@ -177,7 +179,6 @@ exports.confirmStripePayment = async (req, res) => {
 
     await conn.beginTransaction();
 
-    // ✅ prevent double confirm
     const [txUpdate] = await conn.execute(`
       UPDATE transactions
       SET payment_status = 'PAID'
@@ -205,12 +206,7 @@ exports.confirmStripePayment = async (req, res) => {
         WHERE id = ?
         AND shop_id = ?
         AND stock >= ?
-      `, [
-        it.quantity,
-        it.product_id,
-        shopId,
-        it.quantity
-      ]);
+      `, [it.quantity, it.product_id, shopId, it.quantity]);
 
       if (r.affectedRows === 0) {
         throw new Error(`Stock conflict for product ${it.product_id}`);
@@ -225,14 +221,15 @@ exports.confirmStripePayment = async (req, res) => {
   } catch (error) {
     await conn.rollback();
     conn.release();
-    console.error("STRIPE CONFIRM ERROR:", error);
+    console.error("CONFIRM ERROR:", error);
     res.status(500).json({ message: error.message });
   }
 };
 
 
-
-// ================= MARK FAILED =================
+/* =====================================================
+   PRODUCT CARD PAYMENT — FAILED
+===================================================== */
 
 exports.markStripePaymentFailed = async (req, res) => {
   try {
@@ -247,14 +244,16 @@ exports.markStripePaymentFailed = async (req, res) => {
 
     res.json({ success: true });
 
-  } catch {
-    res.status(500).json({
-      message: 'Failed to mark payment as FAILED'
-    });
+  } catch (e) {
+    console.error("FAILED MARK ERROR:", e);
+    res.status(500).json({ message: 'Failed to mark payment as FAILED' });
   }
 };
 
-// ================= SUBSCRIPTION CHECKOUT =================
+
+/* =====================================================
+   SUBSCRIPTION — CHECKOUT (Browser Stripe Page)
+===================================================== */
 
 const PLAN_MAP = {
   weekly:  { amount: 5900, name: 'Weekly Subscription', days: 7 },
@@ -265,8 +264,8 @@ const PLAN_MAP = {
 exports.createSubscriptionCheckout = async (req, res) => {
   try {
     const { plan } = req.body;
-
     const p = PLAN_MAP[plan];
+
     if (!p) {
       return res.status(400).json({ message: 'Invalid plan' });
     }
@@ -289,49 +288,59 @@ exports.createSubscriptionCheckout = async (req, res) => {
 
       metadata: {
         payment_type: 'subscription',
-        userId: req.user.id.toString(),
+        userId: String(req.user.id),
         plan,
-        days: p.days.toString(),
+        days: String(p.days),
       },
     });
 
     res.json({ url: session.url });
 
   } catch (e) {
-    console.error(e);
+    console.error("CHECKOUT ERROR:", e);
     res.status(500).json({ message: 'Subscription checkout failed' });
   }
 };
 
-// stripeController.js
+
+/* =====================================================
+   SUBSCRIPTION — PAYMENT SHEET (IN-APP)
+===================================================== */
 
 exports.createSubscriptionIntent = async (req, res) => {
-  const { plan } = req.body;
+  try {
+    const { plan } = req.body;
 
-  const prices = {
-    weekly: 5900,
-    monthly: 14900,
-    annual: 139900,
-  };
+    const prices = {
+      weekly: 5900,
+      monthly: 14900,
+      annual: 139900,
+    };
 
-  const amount = prices[plan];
+    const amount = prices[plan];
 
-  const intent = await stripe.paymentIntents.create({
-    amount,
-    currency: 'inr',
-    metadata: {
-      type: 'subscription',
-      plan,
-      userId: req.user.id,
-    },
-  });
+    if (!amount) {
+      return res.status(400).json({ message: 'Invalid plan' });
+    }
 
-  res.json({
-    clientSecret: intent.client_secret,
-  });
+    const intent = await stripe.paymentIntents.create({
+      amount,
+      currency: 'inr',
+      metadata: {
+        type: 'subscription',
+        plan: String(plan),
+        userId: String(req.user.id),
+      },
+    });
+
+    console.log("SUB INTENT CREATED:", plan, req.user.id);
+
+    res.json({
+      clientSecret: intent.client_secret,
+    });
+
+  } catch (e) {
+    console.error("SUB INTENT ERROR:", e);
+    res.status(500).json({ message: 'Subscription intent failed' });
+  }
 };
-
-
-
-
-
