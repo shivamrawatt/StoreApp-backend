@@ -8,6 +8,8 @@ const transactionRoutes = require('./routes/transactionRoutes');
 const authRoutes = require('./routes/authRoutes');
 const stripeRoutes = require('./routes/stripeRoutes');
 const sendEmail = require('./utils/SendEmail');
+const ownerAuthRoutes = require('./routes/ownerAuthRoutes');
+
 
 const app = express();
 
@@ -54,6 +56,8 @@ app.use('/api/products', productRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/stripe', stripeRoutes);
+app.use('/api/owner', ownerAuthRoutes);
+
 
 /* ================= ERROR HANDLER ================= */
 app.use((err, req, res, next) => {
