@@ -9,6 +9,7 @@ const authRoutes = require('./routes/authRoutes');
 const stripeRoutes = require('./routes/stripeRoutes');
 const sendEmail = require('./utils/SendEmail');
 const ownerAuthRoutes = require('./routes/ownerAuthRoutes');
+const webhookRoutes = require('./routes/webhookRoutes');
 
 
 const app = express();
@@ -17,8 +18,9 @@ const app = express();
 app.use(cors());
 
 /* ================= STRIPE WEBHOOK — MUST BE BEFORE express.json ================= */
-app.use('/stripe', require('./routes/webhookRoutes'));
 
+
+app.use('/api/webhook', webhookRoutes);
 /* ================= NORMAL JSON PARSER ================= */
 app.use(express.json());
 
@@ -57,6 +59,7 @@ app.use('/api/transactions', transactionRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/stripe', stripeRoutes);
 app.use('/api/owner', ownerAuthRoutes);
+
 
 
 /* ================= ERROR HANDLER ================= */

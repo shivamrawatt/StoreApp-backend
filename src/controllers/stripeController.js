@@ -287,7 +287,6 @@ exports.createSubscriptionCheckout = async (req, res) => {
       cancel_url: process.env.CLIENT_URL + '/payment-cancel',
 
       metadata: {
-        payment_type: 'subscription',
         userId: String(req.user.id),
         plan,
         days: String(p.days),
