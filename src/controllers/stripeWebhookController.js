@@ -2,7 +2,7 @@ const stripe = require('../config/stripe');
 const db = require('../config/db');
 
 exports.handleStripeWebhook = async (req, res) => {
-
+ console.log("WEBHOOK ENTRY HIT");
   const sig = req.headers['stripe-signature'];
   let event;
 
