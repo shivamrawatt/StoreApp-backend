@@ -9,27 +9,33 @@ const authRoutes = require('./routes/authRoutes');
 const stripeRoutes = require('./routes/stripeRoutes');
 const sendEmail = require('./utils/SendEmail');
 const ownerAuthRoutes = require('./routes/ownerAuthRoutes');
-const webhookRoutes = require('./routes/webhookRoutes');
+
 
 
 const app = express();
 
-/* ================= CORS ================= */
+//CORS
 app.use(cors());
 
-/* ================= STRIPE WEBHOOK — MUST BE BEFORE express.json ================= */
+//STRIPE WEBHOOK — MUST BE BEFORE express.json
 
 
-app.use('/api/webhook', webhookRoutes);
-/* ================= NORMAL JSON PARSER ================= */
+app.use('/api/webhook',
+  express.raw({ type: '*/*' }),
+  require('./routes/webhookRoutes')
+);
+
+//Normal parsers for rest
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-/* ================= HEALTH CHECK ================= */
+
+//HEALTH CHECK
 app.get('/api/health', (req, res) => {
   res.json({ status: 'Backend is running' });
 });
 
-/* ================= DB TEST ================= */
+//DB TEST
 app.get('/api/db-test', async (req, res) => {
   try {
     const [rows] = await db.query('SELECT 1 as test');
@@ -39,7 +45,7 @@ app.get('/api/db-test', async (req, res) => {
   }
 });
 
-/* ================= SMTP TEST ================= */
+//SMTP TEST
 app.get("/smtp-test", async (req,res)=>{
   try{
     await sendEmail({
@@ -53,7 +59,7 @@ app.get("/smtp-test", async (req,res)=>{
   }
 });
 
-/* ================= API ROUTES ================= */
+//API ROUTES
 app.use('/api/products', productRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/auth', authRoutes);
@@ -62,7 +68,7 @@ app.use('/api/owner', ownerAuthRoutes);
 
 
 
-/* ================= ERROR HANDLER ================= */
+//ERROR HANDLER
 app.use((err, req, res, next) => {
   console.error("GLOBAL ERROR:", err);
   res.status(500).json({ message: err.message });

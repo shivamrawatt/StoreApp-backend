@@ -3,12 +3,14 @@ const db = require('../config/db');
 
 exports.handleStripeWebhook = async (req, res) => {
  console.log("WEBHOOK ENTRY HIT");
+  console.log("Buffer:", Buffer.isBuffer(req.body));
+
+
   const sig = req.headers['stripe-signature'];
   let event;
 
-  /* ===========================
-     VERIFY STRIPE SIGNATURE
-  =========================== */
+  //VERIFY STRIPE SIGNATURE
+ 
 
   try {
     event = stripe.webhooks.constructEvent(
@@ -24,13 +26,12 @@ exports.handleStripeWebhook = async (req, res) => {
     return res.sendStatus(400);
   }
 
-  /* ===========================
-     HANDLE EVENTS
-  =========================== */
+  // HANDLE EVENTS
+  
 
   try {
 
-    /* ===== PAYMENT INTENT SUCCESS (PaymentSheet / In-App) ===== */
+    //PAYMENT INTENT SUCCESS (PaymentSheet / In-App) 
 
     if (event.type === 'payment_intent.succeeded') {
       const pi = event.data.object;
@@ -74,7 +75,7 @@ exports.handleStripeWebhook = async (req, res) => {
       }
     }
 
-    /* ===== CHECKOUT SESSION SUCCESS (Browser Checkout Flow) ===== */
+    //CHECKOUT SESSION SUCCESS (Browser Checkout Flow)
 
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object;
@@ -122,9 +123,7 @@ exports.handleStripeWebhook = async (req, res) => {
     console.error("Webhook handler error:", handlerErr.message);
   }
 
-  /* ===========================
-     ALWAYS ACK STRIPE
-  =========================== */
+  //  ALWAYS ACK STRIPE
 
   res.json({ received: true });
 };
