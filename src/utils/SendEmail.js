@@ -1,5 +1,13 @@
 const nodemailer = require("nodemailer");
 const brevoTransport = require("nodemailer-brevo-transport");
+require('dotenv').config({
+  path: require('path').resolve(__dirname, '../../.env')
+});
+
+
+console.log("BREVO KEY:", process.env.BREVO_API_KEY);
+console.log("OWNER EMAIL:", process.env.OWNER_EMAIL);
+
 
 const transporter = nodemailer.createTransport(
   new brevoTransport({

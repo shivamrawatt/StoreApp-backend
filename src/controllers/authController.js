@@ -246,49 +246,41 @@ exports.signupVerify = async (req, res) => {
   const conn = await db.getConnection();
 
   try {
-    const { email, otp, shopName } = req.body;
+    const { otp } = req.body;
 
     const [[user]] = await conn.execute(`
-      SELECT * FROM users
-      WHERE email=? AND otp=? AND email_verified=0
-            AND otp_expires > NOW()
-    `, [email, otp]);
+      SELECT id FROM users
+      WHERE otp = ?
+        AND email_verified = 0
+        AND otp_expires > NOW()
+    `, [otp]);
 
     if (!user) {
       conn.release();
-      return res.status(400).json({ message: "Invalid or expired OTP" });
+      return res.status(400).json({
+        message: "Invalid or expired OTP"
+      });
     }
 
-    await conn.beginTransaction();
-
-    // create shop
-    const [shop] = await conn.execute(`
-      INSERT INTO shops (name, owner_email, owner_username)
-      VALUES (?,?,?)
-    `, [shopName, email, user.username]);
-
-    // activate user
     await conn.execute(`
       UPDATE users
-      SET email_verified=1,
-          otp=NULL,
-          otp_expires=NULL,
-          shop_id=?
-      WHERE id=?
-    `, [shop.insertId, user.id]);
+      SET email_verified = 1,
+          otp = NULL,
+          otp_expires = NULL
+      WHERE id = ?
+    `, [user.id]);
 
-    await conn.commit();
     conn.release();
 
-    res.json({ message: "Account verified and shop created" });
+    res.json({
+      message: "OTP verified successfully"
+    });
 
   } catch (e) {
-    await conn.rollback();
     conn.release();
     res.status(500).json({ message: e.message });
   }
 };
-
 
 
 /* =====================================================

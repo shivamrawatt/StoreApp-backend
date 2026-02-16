@@ -4,6 +4,8 @@ const db = require('../config/db');
 exports.handleStripeWebhook = async (req, res) => {
   console.log("🔥 WEBHOOK ENTRY");
 
+  console.log(process.env.STRIPE_WEBHOOK_SECRET);
+  
   const sig = req.headers['stripe-signature'];
   let event;
 
@@ -11,7 +13,7 @@ exports.handleStripeWebhook = async (req, res) => {
     event = stripe.webhooks.constructEvent(
       req.body,
       sig,
-      process.env.STRIPE_WEBHOOK_SECRET
+      'whsec_wFvdN98W8fUJPtcXLWbeO8nZxbzkt0p4'
     );
   } catch (err) {
     console.log("SIGNATURE FAIL:", err.message);
