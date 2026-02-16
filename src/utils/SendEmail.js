@@ -5,9 +5,6 @@ require('dotenv').config({
 });
 
 
-console.log("BREVO KEY:", process.env.BREVO_API_KEY);
-console.log("OWNER EMAIL:", process.env.OWNER_EMAIL);
-
 
 const transporter = nodemailer.createTransport(
   new brevoTransport({
@@ -26,7 +23,7 @@ const sendEmail = async ({ to, subject, text }) => {
 
     console.log("📨 Brevo mail sent:", info.messageId);
   } catch (err) {
-    console.error("❌ Brevo mail error:", err.message);
+    console.error("Brevo mail error:", err.message);
     throw err;
   }
 };
