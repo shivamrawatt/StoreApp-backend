@@ -25,7 +25,7 @@ app.use('/api/webhook',
   require('./routes/webhookRoutes')
 );
 
-//Normal parsers for rest
+//NORMAL PARSERS
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
