@@ -209,6 +209,9 @@ exports.getProducts = async (req, res) => {
 // ================= CREATE PRODUCT =================
 
 exports.createProduct = async (req, res) => {
+
+  console.log("TOKEN USER:", req.user);
+
   try {
     const { name, stock, price, unit } = req.body;
     const shopId = req.user.shopId;

@@ -187,16 +187,18 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const sendEmail = require('../utils/SendEmail');
 
-
 /* =====================================================
    SIGNUP REQUEST — CREATE USER + SEND OTP
 ===================================================== */
 
 exports.signupRequest = async (req, res) => {
   try {
-    const { username, password, name, email, mobile } = req.body;
+    const { username, password, name, email, mobile, shopName } = req.body;
 
-    // check existing user
+    if (!shopName) {
+      return res.status(400).json({ message: "shopName required" });
+    }
+
     const [exist] = await db.execute(
       "SELECT id FROM users WHERE username=? OR email=?",
       [username, email]
@@ -208,11 +210,12 @@ exports.signupRequest = async (req, res) => {
 
     const hashed = await bcrypt.hash(password, 10);
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiry = new Date(Date.now() + 5 * 60 * 1000);
 
     await db.execute(`
       INSERT INTO users
-      (username,password,name,email,mobile,role,email_verified,otp,otp_expires,subscription_status)
-      VALUES (?,?,?,?,?,'admin',0,?,?,'inactive')
+      (username,password,name,email,mobile,role,email_verified,otp,otp_expires,subscription_status,pending_shop_name)
+      VALUES (?,?,?,?,?,'admin',0,?,?,'inactive',?)
     `, [
       username,
       hashed,
@@ -220,7 +223,8 @@ exports.signupRequest = async (req, res) => {
       email,
       mobile,
       otp,
-      new Date(Date.now() + 5 * 60 * 1000)
+      expiry,
+      shopName
     ]);
 
     await sendEmail({
@@ -232,59 +236,89 @@ exports.signupRequest = async (req, res) => {
     res.json({ message: "OTP sent to email" });
 
   } catch (e) {
+    console.error(e);
     res.status(500).json({ message: e.message });
   }
 };
 
 
-
 /* =====================================================
-   VERIFY OTP — CREATE SHOP + ACTIVATE USER
+   VERIFY OTP — CREATE SHOP + LINK USER
 ===================================================== */
 
 exports.signupVerify = async (req, res) => {
   const conn = await db.getConnection();
 
   try {
+    await conn.beginTransaction();
+
     const { otp } = req.body;
 
     const [[user]] = await conn.execute(`
-      SELECT id FROM users
+      SELECT id, username, email, pending_shop_name
+      FROM users
       WHERE otp = ?
         AND email_verified = 0
         AND otp_expires > NOW()
     `, [otp]);
 
     if (!user) {
+      await conn.rollback();
       conn.release();
       return res.status(400).json({
         message: "Invalid or expired OTP"
       });
     }
 
+    if (!user.pending_shop_name) {
+      await conn.rollback();
+      conn.release();
+      return res.status(400).json({
+        message: "Shop name missing"
+      });
+    }
+
+    // ✅ create shop
+    const [shopResult] = await conn.execute(`
+      INSERT INTO shops (name, email,username)
+      VALUES (?, ?, ?)
+    `, [
+      user.pending_shop_name,
+      user.email,
+      user.username
+    ]);
+
+    const shopId = shopResult.insertId;
+
+    // ✅ update user
     await conn.execute(`
       UPDATE users
       SET email_verified = 1,
           otp = NULL,
-          otp_expires = NULL
+          otp_expires = NULL,
+          shop_id = ?,
+          pending_shop_name = NULL
       WHERE id = ?
-    `, [user.id]);
+    `, [shopId, user.id]);
 
+    await conn.commit();
     conn.release();
 
     res.json({
-      message: "OTP verified successfully"
+      message: "OTP verified + shop created"
     });
 
   } catch (e) {
+    await conn.rollback();
     conn.release();
+    console.error(e);
     res.status(500).json({ message: e.message });
   }
 };
 
 
 /* =====================================================
-   LOGIN — ALLOW ONLY VERIFIED EMAIL
+   LOGIN
 ===================================================== */
 
 exports.login = async (req, res) => {
@@ -292,7 +326,7 @@ exports.login = async (req, res) => {
     const { username, password } = req.body;
 
     const [rows] = await db.execute(`
-      SELECT u.*, s.id AS shopId, s.name AS shopName
+      SELECT u.*, s.name AS shopName
       FROM users u
       LEFT JOIN shops s ON u.shop_id = s.id
       WHERE u.username = ?
@@ -311,7 +345,13 @@ exports.login = async (req, res) => {
 
     if (!user.email_verified) {
       return res.status(403).json({
-        message: "Please verify your email OTP first"
+        message: "Verify OTP first"
+      });
+    }
+
+    if (!user.shop_id) {
+      return res.status(400).json({
+        message: "User not linked to shop"
       });
     }
 
@@ -341,10 +381,10 @@ exports.login = async (req, res) => {
     });
 
   } catch (e) {
+    console.error(e);
     res.status(500).json({ message: e.message });
   }
 };
-
 
 
 /* =====================================================
@@ -362,7 +402,6 @@ exports.getMyProfile = async (req, res) => {
         u.mobile,
         u.role,
         u.subscription_status,
-        u.subscription_expires,
         s.id AS shopId,
         s.name AS shopName
       FROM users u
