@@ -46,6 +46,9 @@ exports.handleStripeWebhook = async (req, res) => {
       expires.setDate(expires.getDate() + days);
 
       try {
+
+        // ✅ YOUR EXISTING CODE (UNCHANGED)
+
         const [r] = await db.execute(`
           UPDATE users
           SET subscription_status = 'active',
@@ -55,6 +58,26 @@ exports.handleStripeWebhook = async (req, res) => {
         `, [plan, expires, userId]);
 
         console.log("✅ SUB UPDATED rows:", r.affectedRows);
+
+
+        // 🔥 NEW CODE ADDED (TRANSACTION LOG)
+
+        const amount = pi.amount_received / 100;
+        const paidAt = new Date();
+
+        await db.execute(`
+          INSERT INTO subscription_transactions
+          (user_id,plan,amount,status,paid_at)
+          VALUES (?,?,?,?,?)
+        `, [
+          userId,
+          plan,
+          amount,
+          'PAID',
+          paidAt
+        ]);
+
+        console.log("💰 TRANSACTION INSERTED");
 
       } catch (e) {
         console.log("DB ERROR:", e.message);

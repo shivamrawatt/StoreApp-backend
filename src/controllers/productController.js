@@ -209,33 +209,79 @@ exports.getProducts = async (req, res) => {
 // ================= CREATE PRODUCT =================
 
 exports.createProduct = async (req, res) => {
-
-  console.log("TOKEN USER:", req.user);
-
   try {
+
     const { name, stock, price, unit } = req.body;
     const shopId = req.user.shopId;
-
     const image = req.file ? req.file.path : '';
 
-    const nameLower = name.trim().toLowerCase();
+    if (!name || !stock || !price || !unit) {
+      return res.status(400).json({
+        error: "Missing required fields"
+      });
+    }
 
+    const cleanName = name.trim();
+    const cleanUnit = unit.trim();
+    const nameLower = cleanName.toLowerCase();
+
+    // 🔍 STEP 1: CHECK IF PRODUCT EXISTS
+    const [existing] = await db.execute(
+      `SELECT id FROM products
+       WHERE shop_id=? AND name_lower=?`,
+      [shopId, nameLower]
+    );
+
+    // 🔥 STEP 2: IF EXISTS → MERGE
+    if (existing.length > 0) {
+
+      await db.execute(
+        `UPDATE products
+         SET stock = stock + ?,
+             price = ?,
+             unit = ?,
+             image = COALESCE(?, image)
+         WHERE shop_id=? AND name_lower=?`,
+        [
+          Number(stock),
+          Number(price),
+          cleanUnit,
+          image || null,
+          shopId,
+          nameLower
+        ]
+      );
+
+      return res.json({
+        message: "Product exists. Stock merged."
+      });
+    }
+
+    // 🟢 STEP 3: ELSE INSERT NEW
     await db.execute(
       `INSERT INTO products
        (shop_id, name, name_lower, stock, unit, price, image)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [shopId, name, nameLower, stock, unit, price, image]
+      [
+        shopId,
+        cleanName,
+        nameLower,
+        Number(stock),
+        cleanUnit,
+        Number(price),
+        image
+      ]
     );
 
-    res.json({ message: 'Product created' });
+    res.json({
+      message: "New product created"
+    });
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Create failed' });
+    res.status(500).json({ error: "Create failed" });
   }
 };
-
-
 
 // ================= UPDATE PRODUCT =================
 
@@ -313,12 +359,7 @@ exports.updateStock = async (req, res) => {
     const { stock, change } = req.body;
     const shopId = req.user.shopId;   // ⭐ FIXED
 
-    console.log("UPDATE STOCK INPUT:", {
-      id,
-      stock,
-      change,
-      shopId
-    });
+    
 
     if (!id) {
       return res.status(400).json({ message: "Product id missing" });
