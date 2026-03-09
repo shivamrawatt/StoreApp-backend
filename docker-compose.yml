@@ -1,24 +1,16 @@
+version: "3.9"
+
 services:
-  mysql:
-    image: mysql:8.0
-    container_name: mysql_docker
-    restart: always
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: store_backend
     ports:
-      - "3307:3306"
+      - "5000:5000"
+    env_file:
+      - .env
     environment:
-      MYSQL_ROOT_PASSWORD: root
-    volumes:
-      - mysql_data:/var/lib/mysql
-
-  dbgate:
-    image: dbgate/dbgate:latest
-    container_name: db_ui
-    restart: always
-    ports:
-      - "3000:3000"
-    volumes:
-      - dbgate_data:/root/.dbgate
-
-volumes:
-  mysql_data:
-  dbgate_data:
+      NODE_ENV: development
+      PORT: 5000
+    restart: unless-stopped
