@@ -5,6 +5,9 @@ require('dotenv').config({
 });
 
 
+console.log("BREVO_API_KEY:", process.env.BREVO_API_KEY);
+console.log("OWNER_EMAIL:", process.env.OWNER_EMAIL);
+
 
 const transporter = nodemailer.createTransport(
   new brevoTransport({
