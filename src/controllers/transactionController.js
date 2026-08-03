@@ -107,7 +107,7 @@ exports.deleteTransaction = async (req, res) => {
 const db = require('../config/db');
 
 
-// ================= CREATE TRANSACTION =================
+
 
 exports.createTransaction = async (req, res) => {
   const conn = await db.getConnection();
