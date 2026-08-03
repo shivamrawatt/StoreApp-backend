@@ -30,5 +30,13 @@ jobs:
       - name: Run ESLint
         run: npm run lint
 
+      - name: Create .env
+        run: |
+                 echo "PORT=${{ secrets.PORT }}" >> .env
+                 echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> .env
+                 echo "STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}" >> .env
+                 echo "BREVO_API_KEY=${{ secrets.BREVO_API_KEY }}" >> .env
+                 echo "OWNER_EMAIL=${{ secrets.OWNER_EMAIL }}" >> .env
+
       - name: Run Tests
         run: npm run test
