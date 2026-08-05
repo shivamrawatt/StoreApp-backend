@@ -1,0 +1,12 @@
+name: Docker Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  hello:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Print Message
+        run: echo "Docker workflow is working!"
