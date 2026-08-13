@@ -40,6 +40,7 @@ app.get('/api/health', (req, res) => {
 //DB TEST
 app.get('/api/db-test', async (req, res) => {
   try {
+    
     const [rows] = await db.query('SELECT 1 as test');
     res.json({ success: true, message: "DB connected", result: rows });
   } catch (err) {
