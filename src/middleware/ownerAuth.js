@@ -17,6 +17,9 @@ module.exports = function ownerAuth(req, res, next) {
       process.env.JWT_SECRET
     );
 
+
+    
+
     if (decoded.role !== 'owner') {
       return res.status(403).json({ msg: 'Owner only access' });
     }
