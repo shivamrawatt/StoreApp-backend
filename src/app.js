@@ -34,7 +34,7 @@ app.use(express.urlencoded({ extended: true }));
 
 //HEALTH CHECK
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'Backend is running' });
+  res.json({ status: 'Backend is running in openship' });
 });
 
 //DB TEST
@@ -72,7 +72,8 @@ app.use('/api/owner', ownerAuthRoutes);
 
 
 //ERROR HANDLER
-app.use((err, req, res) => {
+//ERROR HANDLER
+app.use((err, req, res, next) => {
   console.error("GLOBAL ERROR:", err);
   res.status(500).json({ message: err.message });
 });
